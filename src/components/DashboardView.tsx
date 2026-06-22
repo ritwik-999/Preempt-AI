@@ -193,15 +193,8 @@ export default function DashboardView({
 
           <div className="flex flex-wrap gap-3">
             <button 
-              onClick={onTriggerOptimizer}
-              disabled={optimizerLoading}
-              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-450 text-zinc-950 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
-            >
-              {optimizerLoading ? "De-conflicting..." : "Optimize Baseline"}
-            </button>
-            <button 
               onClick={onAddTaskClick}
-              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-450 text-zinc-950 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
             >
               Record New Task
             </button>

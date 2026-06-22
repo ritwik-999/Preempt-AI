@@ -6,10 +6,15 @@ import ChatView from "./components/ChatView";
 import AnalyticsView from "./components/AnalyticsView";
 import VoiceConsole from "./components/VoiceConsole";
 import LoginView from "./components/LoginView";
+import CustomCursor from "./components/CustomCursor";
+import LoadingScreen from "./components/LoadingScreen";
 import { Task, Subtask, CalendarEvent, ActivityLog } from "./types";
 import { Sparkles, Calendar, Settings, ShieldAlert } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
+  const [appLoaded, setAppLoaded] = useState(false);
+
   // Authentication states
   const [userEmail, setUserEmail] = useState<string | null>(() => {
     return localStorage.getItem("preempt_user_email") || null;
@@ -251,13 +256,47 @@ export default function App() {
     }
   };
 
+  if (!appLoaded) {
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="loader-wrapper"
+          initial={{ opacity: 1 }}
+          exit={{ 
+            opacity: 0,
+            filter: "blur(6px) brightness(1.8)",
+            scale: 0.98,
+            transition: { duration: 0.8, ease: "easeInOut" }
+          }}
+          className="fixed inset-0 z-50 bg-[#09090b]"
+        >
+          <LoadingScreen onComplete={() => setAppLoaded(true)} />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
   // If unauthorized, direct to secure Clerk portal
   if (!userEmail) {
-    return <LoginView onLoginSuccess={handleLogin} />;
+    return (
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="login-wrapper"
+          initial={{ opacity: 0, filter: "brightness(0.4) contrast(1.3)", scale: 1.03 }}
+          animate={{ opacity: 1, filter: "brightness(1) contrast(1)", scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          transition={{ duration: 0.8, ease: [0.19, 1, 0.22, 1] }}
+        >
+          <CustomCursor />
+          <LoginView onLoginSuccess={handleLogin} />
+        </motion.div>
+      </AnimatePresence>
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-emerald-500/30">
+      <CustomCursor />
       
       {/* Top sticky navbar navigation indicators */}
       <Navbar

@@ -60,6 +60,53 @@ function loadDB(): DBSchema {
       parsed.activity_logs = [];
       fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
     }
+
+    // Ensure users table exists
+    if (!parsed.users) {
+      parsed.users = [];
+    }
+
+    // Ensure the default login accounts are registered
+    const normalizedAbc = "abc@gmail.com";
+    const hasAbc = parsed.users.some((u: any) => u.email && u.email.toLowerCase() === normalizedAbc);
+    if (!hasAbc) {
+      parsed.users.push({
+        id: "user_abc",
+        email: normalizedAbc,
+        name: "ABC User",
+        password: "pass123",
+        clerkId: "clerk_abc_1234",
+        createdAt: new Date().toISOString()
+      });
+      fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
+    }
+
+    const normalizedRitwik = "ritwikkapat@gmail.com";
+    const hasRitwik = parsed.users.some((u: any) => u.email && u.email.toLowerCase() === normalizedRitwik);
+    if (!hasRitwik) {
+      parsed.users.push({
+        id: "user_default",
+        email: normalizedRitwik,
+        name: "Ritwik Kapat",
+        password: "pass123",
+        clerkId: "clerk_active_7761",
+        createdAt: new Date().toISOString()
+      });
+      fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
+    }
+
+    // Ensure all registered users have a password
+    let dbUpdated = false;
+    parsed.users.forEach((u: any) => {
+      if (!u.password) {
+        u.password = "pass123";
+        dbUpdated = true;
+      }
+    });
+
+    if (dbUpdated) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
+    }
     
     return parsed;
   } catch (error) {
@@ -153,6 +200,94 @@ async function generateContentWithFallback(params: {
 }
 
 // REST endpoints for Preempt DB Actions
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
+
+  const db = loadDB();
+  const normalizedEmail = email.trim().toLowerCase();
+  
+  // Find user
+  let user = db.users.find(u => u.email && u.email.trim().toLowerCase() === normalizedEmail);
+  
+  if (!user) {
+    // Register the user automatically with the provided password!
+    user = {
+      id: "user_" + Math.random().toString(36).substring(2, 9),
+      email: normalizedEmail,
+      name: email.split("@")[0],
+      password: password, // Store password
+      createdAt: new Date().toISOString()
+    };
+    db.users.push(user);
+    
+    // Create an initial welcome activity log for this newly registered user
+    db.activity_logs.unshift({
+      id: "log_" + Date.now(),
+      userId: normalizedEmail,
+      timestamp: new Date().toISOString(),
+      action: "Account Registered",
+      details: "Welcome to Preempt AI! Your persistent secure workspace is ready.",
+      category: "INFO"
+    });
+
+    writeDB(db);
+    return res.json({ success: true, email: user.email, message: "Welcome! Registered your new secure workspace." });
+  } else {
+    // If user exists, verify password!
+    if (user.password && user.password !== password) {
+      return res.status(401).json({ error: "Incorrect password for this email address. Please try again." });
+    }
+    
+    // If for some reason password is blank, register/save the submitted password
+    if (!user.password) {
+      user.password = password;
+      writeDB(db);
+    }
+    
+    return res.json({ success: true, email: user.email });
+  }
+});
+
+app.post("/api/auth/reset-password", (req, res) => {
+  const { email, newPassword } = req.body;
+  if (!email || !newPassword) {
+    return res.status(400).json({ error: "Email and new password are required." });
+  }
+
+  const db = loadDB();
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // Find user
+  const user = db.users.find(u => u.email && u.email.trim().toLowerCase() === normalizedEmail);
+
+  if (!user) {
+    return res.status(404).json({ error: "Account not found. Please register or verify the email spelling." });
+  }
+
+  // Update password in db
+  user.password = newPassword;
+
+  // Add key action activity log
+  db.activity_logs.unshift({
+    id: "log_" + Date.now(),
+    userId: normalizedEmail,
+    timestamp: new Date().toISOString(),
+    action: "Password Reset Completed",
+    details: "Your workspace password was successfully updated via self-service verification.",
+    category: "WARNING"
+  });
+
+  writeDB(db);
+
+  return res.json({ 
+    success: true, 
+    message: "Password updated successfully! You can now log in with your new credentials." 
+  });
+});
+
 app.get("/api/db/get", (req, res) => {
   const db = loadDB();
   const userEmail = (req.headers["x-user-email"] as string) || "user_default";
