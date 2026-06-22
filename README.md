@@ -1,7 +1,9 @@
 <div align="center">
 <img width="1200" height="720" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
-# Preempt AI
+
+
+## Preempt AI
 
 Preempt AI is a full-stack productivity and scheduling assistant built with React, Vite, Express, and Gemini. It helps users capture tasks, break them into milestones, estimate priority and risk, schedule protected work blocks, and review productivity analytics from a local project dashboard.
 
@@ -53,6 +55,12 @@ Preempt AI is a full-stack productivity and scheduling assistant built with Reac
 |-- vite.config.ts               # Vite, React, Tailwind configuration
 `-- package.json                 # Scripts and dependencies
 ```
+
+## Live Demo
+Try Preempt AI
+
+🔗 Deployed Application:
+https://preempt-ai-293715441413.asia-southeast1.run.app
 
 ## Prerequisites
 
