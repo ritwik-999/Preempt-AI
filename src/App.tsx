@@ -33,7 +33,9 @@ export default function App() {
   // Sync DB action
   const syncDBState = async () => {
     try {
-      const res = await fetch("/api/db/get");
+      const res = await fetch("/api/db/get", {
+        headers: { "x-user-email": userEmail || "" }
+      });
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
@@ -70,7 +72,10 @@ export default function App() {
     try {
       const res = await fetch("/api/db/subtasks/toggle", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-email": userEmail || ""
+        },
         body: JSON.stringify({ id: subtaskId, completed })
       });
       if (res.ok) {
@@ -105,7 +110,10 @@ export default function App() {
 
       const resTask = await fetch("/api/db/tasks/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-email": userEmail || ""
+        },
         body: JSON.stringify(reqTask)
       });
       const dataTask = await resTask.json();
@@ -117,7 +125,10 @@ export default function App() {
         for (const sub of taskPayload.subtasks) {
           await fetch("/api/db/subtasks/add", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-email": userEmail || ""
+            },
             body: JSON.stringify({
               taskId: savedTaskId,
               title: sub.title,
@@ -140,7 +151,8 @@ export default function App() {
   const handleDeleteTask = async (taskId: string) => {
     try {
       const res = await fetch(`/api/db/tasks/${taskId}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: { "x-user-email": userEmail || "" }
       });
       if (res.ok) {
         triggerNotificationStatus("Task roadmap and subtask baseline cleared successfully.");
@@ -156,7 +168,10 @@ export default function App() {
     setOptimizerLoading(true);
     triggerNotificationStatus("Coordinating open calendars... Preempt AI scheduler is auditing free pockets.");
     try {
-      const res = await fetch("/api/ai/optimize-schedule", { method: "POST" });
+      const res = await fetch("/api/ai/optimize-schedule", {
+        method: "POST",
+        headers: { "x-user-email": userEmail || "" }
+      });
       if (res.ok) {
         syncDBState();
         triggerNotificationStatus("Roadmap schedule optimized successfully! Secured work slots in calendar roadmap.");
@@ -172,7 +187,10 @@ export default function App() {
   const handleSyncCalendar = async () => {
     setCalendarLoading(true);
     try {
-      const res = await fetch("/api/calendar/sync-all", { method: "POST" });
+      const res = await fetch("/api/calendar/sync-all", {
+        method: "POST",
+        headers: { "x-user-email": userEmail || "" }
+      });
       if (res.ok) {
         const data = await res.json();
         syncDBState();
@@ -214,6 +232,7 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
             optimizerLoading={optimizerLoading}
             calendarLoading={calendarLoading}
+            userEmail={userEmail}
           />
         );
       case "create":

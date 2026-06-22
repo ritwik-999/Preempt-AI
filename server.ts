@@ -33,106 +33,10 @@ const INITIAL_DB: DBSchema = {
       createdAt: new Date().toISOString()
     }
   ],
-  tasks: [
-    {
-      id: "task_1",
-      userId: "user_default",
-      title: "Chemistry Lab Report Draft",
-      description: "Analyze the thermodynamic kinetics data from Lab 4 and draft the complete laboratory findings.",
-      deadline: new Date(Date.now() + 86400000).toISOString(), // 24 hours from now
-      status: "PENDING",
-      priority: "HIGH",
-      impactScore: 8,
-      effortScore: 6,
-      riskLevel: "HIGH",
-      riskReason: "Deadline is tomorrow, and total estimated effort for lab data review is high, overlapping with your calendar meetings.",
-      scheduledSlot: "",
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: "task_2",
-      userId: "user_default",
-      title: "Preempt AI Project Pitch Slides",
-      description: "Build a highly compelling business pitch with real user research data and visual UI maps.",
-      deadline: new Date(Date.now() + 4 * 86400000).toISOString(), // 4 days from now
-      status: "IN_PROGRESS",
-      priority: "CRITICAL",
-      impactScore: 10,
-      effortScore: 8,
-      riskLevel: "MEDIUM",
-      riskReason: "Substantial effort remains, but you have free slots over the weekend to cover this product presentation.",
-      scheduledSlot: "",
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: "task_3",
-      userId: "user_default",
-      title: "Renew Comprehensive Auto Insurance",
-      description: "Check the auto insurance quote options and complete renewal checkout.",
-      deadline: new Date(Date.now() + 15 * 86400000).toISOString(), // 15 days from now
-      status: "PENDING",
-      priority: "LOW",
-      impactScore: 3,
-      effortScore: 2,
-      riskLevel: "LOW",
-      riskReason: "Ample window before deadline, low risk factors detected.",
-      scheduledSlot: "",
-      createdAt: new Date().toISOString()
-    }
-  ],
-  subtasks: [
-    { id: "sub_1", taskId: "task_1", title: "Format visual thermodynamic plots", completed: false, order: 1, estimatedMinutes: 45 },
-    { id: "sub_2", taskId: "task_1", title: "Review kinetics theory definitions", completed: false, order: 2, estimatedMinutes: 30 },
-    { id: "sub_3", taskId: "task_1", title: "Compose background introduction section", completed: false, order: 3, estimatedMinutes: 60 },
-    { id: "sub_4", taskId: "task_1", title: "Perform statistical calculation audit", completed: true, order: 4, estimatedMinutes: 30 },
-    
-    { id: "sub_5", taskId: "task_2", title: "Synthesize target user persona slides", completed: true, order: 1, estimatedMinutes: 45 },
-    { id: "sub_6", taskId: "task_2", title: "Design beautiful figma mocks for deck", completed: false, order: 2, estimatedMinutes: 120 },
-    { id: "sub_7", taskId: "task_2", title: "Draft executive ROI presentation narrative", completed: false, order: 3, estimatedMinutes: 65 }
-  ],
-  calendar_events: [
-    {
-      id: "event_1",
-      userId: "user_default",
-      title: "Preempt AI Progress Briefing",
-      start: new Date(new Date().setHours(10, 0, 0, 0)).toISOString(),
-      end: new Date(new Date().setHours(11, 30, 0, 0)).toISOString(),
-      description: "Internal team sync regarding core agents and Google Calendar schedule triggers.",
-      synced: true,
-      source: "PREEMPT_AI"
-    },
-    {
-      id: "event_2",
-      userId: "user_default",
-      title: "Corporate UX/UI Alignment Review",
-      start: new Date(new Date().setHours(14, 0, 0, 0)).toISOString(),
-      end: new Date(new Date().setHours(15, 0, 0, 0)).toISOString(),
-      description: "Design evaluation workshop.",
-      synced: true,
-      source: "GOOGLE_CALENDAR"
-    },
-    {
-      id: "event_3",
-      userId: "user_default",
-      title: "Product Marketing Sync",
-      start: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
-      start_hour: 11,
-      end: new Date(Date.now() + 86400000 + 3600000).toISOString(),
-      description: "Alignment call on new launch items.",
-      synced: false,
-      source: "GOOGLE_CALENDAR"
-    }
-  ],
-  activity_logs: [
-    {
-      id: "log_1",
-      userId: "user_default",
-      timestamp: new Date().toISOString(),
-      action: "System Bootstrapped",
-      details: "Database populated with initial Preempt AI companion templates.",
-      category: "SUCCESS"
-    }
-  ]
+  tasks: [],
+  subtasks: [],
+  calendar_events: [],
+  activity_logs: []
 };
 
 // Function targeting load database
@@ -143,7 +47,21 @@ function loadDB(): DBSchema {
       return INITIAL_DB;
     }
     const raw = fs.readFileSync(DB_FILE, "utf-8");
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    
+    // Automatically purge preloaded template tasks and calendar elements to ensure clean slate
+    if (
+      (parsed.tasks && parsed.tasks.some((t: any) => t.id === "task_1" || t.id === "task_2" || t.id === "task_3")) ||
+      (parsed.calendar_events && parsed.calendar_events.some((e: any) => e.id === "event_1" || e.id === "event_2" || e.id === "event_3"))
+    ) {
+      parsed.tasks = [];
+      parsed.subtasks = [];
+      parsed.calendar_events = [];
+      parsed.activity_logs = [];
+      fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
+    }
+    
+    return parsed;
   } catch (error) {
     console.error("Error reading db file:", error);
     return INITIAL_DB;
@@ -180,21 +98,89 @@ function getAIInstance(): GoogleGenAI | null {
   return ai;
 }
 
+// Resilient wrapping function with exponential backoff retry and flash-lite fallback capability
+async function generateContentWithFallback(params: {
+  model?: string;
+  contents: any;
+  config?: any;
+}) {
+  const customAI = getAIInstance();
+  if (!customAI) {
+    throw new Error("No Gemini API connection available.");
+  }
+
+  const firstChoiceModel = params.model || "gemini-3.5-flash";
+  const modelsToTry = [firstChoiceModel, "gemini-3.1-flash-lite"];
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    // Attempt twice per model if transitively unavailable or rate-limited
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await customAI.models.generateContent({
+          ...params,
+          model,
+        });
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        const msg = err?.message || String(err);
+        const code = err?.status || err?.code || 0;
+        console.warn(`[Gemini Resiliency Wrapper] Model "${model}" (attempt ${attempt}/2) failed with code ${code}. Error text: ${msg}`);
+
+        const isTransient = 
+          code === 503 || 
+          code === 429 || 
+          msg.includes("503") || 
+          msg.includes("429") || 
+          msg.includes("demand") || 
+          msg.includes("temporary") || 
+          msg.includes("UNAVAILABLE") || 
+          msg.includes("Unavailable");
+
+        if (isTransient && attempt < 2) {
+          // Progressively wait: 1000ms, then 2000ms
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+        // If it's a structural error (like schema failure) or we compiled all attempts, fall over to lite model
+        break;
+      }
+    }
+  }
+
+  throw lastError || new Error("All requested models and fallbacks failed generation.");
+}
+
 // REST endpoints for Preempt DB Actions
 app.get("/api/db/get", (req, res) => {
   const db = loadDB();
-  res.json(db);
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
+  
+  const userTasks = db.tasks.filter(t => t.userId === userEmail);
+  const userTaskIds = new Set(userTasks.map(t => t.id));
+  const userSubtasks = db.subtasks.filter(s => userTaskIds.has(s.taskId));
+  const userEvents = db.calendar_events.filter(e => e.userId === userEmail);
+  const userLogs = db.activity_logs.filter(l => l.userId === userEmail);
+  
+  res.json({
+    tasks: userTasks,
+    subtasks: userSubtasks,
+    calendar_events: userEvents,
+    activity_logs: userLogs
+  });
 });
 
 // Update or merge tasks
 app.post("/api/db/tasks/save", (req, res) => {
   const db = loadDB();
   const task = req.body;
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   
   if (!task.id) {
     task.id = "task_" + Math.random().toString(36).substring(2, 9);
     task.createdAt = new Date().toISOString();
-    task.userId = "user_default";
+    task.userId = userEmail;
     task.status = task.status || "PENDING";
     task.priority = task.priority || "MEDIUM";
     task.riskLevel = task.riskLevel || "LOW";
@@ -204,8 +190,10 @@ app.post("/api/db/tasks/save", (req, res) => {
   } else {
     const idx = db.tasks.findIndex(t => t.id === task.id);
     if (idx !== -1) {
-      db.tasks[idx] = { ...db.tasks[idx], ...task };
+      const existingTask = db.tasks[idx];
+      db.tasks[idx] = { ...existingTask, ...task, userId: existingTask.userId || userEmail };
     } else {
+      task.userId = userEmail;
       db.tasks.push(task);
     }
   }
@@ -213,7 +201,7 @@ app.post("/api/db/tasks/save", (req, res) => {
   // Log it
   db.activity_logs.unshift({
     id: "log_" + Date.now(),
-    userId: "user_default",
+    userId: userEmail,
     timestamp: new Date().toISOString(),
     action: `Task Updated`,
     details: `Task: "${task.title}" updated successfully.`,
@@ -227,10 +215,26 @@ app.post("/api/db/tasks/save", (req, res) => {
 // Delete Task
 app.delete("/api/db/tasks/:id", (req, res) => {
   const { id } = req.params;
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   const db = loadDB();
+  
+  const task = db.tasks.find(t => t.id === id);
+  if (task && task.userId !== userEmail) {
+    return res.status(403).json({ error: "Unauthorized access to this task." });
+  }
+
   db.tasks = db.tasks.filter(t => t.id !== id);
   db.subtasks = db.subtasks.filter(s => s.taskId !== id);
   
+  db.activity_logs.unshift({
+    id: "log_" + Date.now(),
+    userId: userEmail,
+    timestamp: new Date().toISOString(),
+    action: "Task Deleted",
+    details: `Task roadmap and matching subtask parameters deleted.`,
+    category: "WARNING"
+  });
+
   writeDB(db);
   res.json({ success: true });
 });
@@ -238,15 +242,21 @@ app.delete("/api/db/tasks/:id", (req, res) => {
 // Update standard Subtask checkboxes
 app.post("/api/db/subtasks/toggle", (req, res) => {
   const { id, completed } = req.body;
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   const db = loadDB();
   const subtask = db.subtasks.find(s => s.id === id);
   if (subtask) {
+    const parentTask = db.tasks.find(t => t.id === subtask.taskId);
+    if (parentTask && parentTask.userId !== userEmail) {
+      return res.status(403).json({ error: "Unauthorized access to this subtask." });
+    }
+
     subtask.completed = completed;
     
     // Log the event
     db.activity_logs.unshift({
       id: "log_" + Date.now(),
-      userId: "user_default",
+      userId: userEmail,
       timestamp: new Date().toISOString(),
       action: "Subtask Toggled",
       details: `Subtask "${subtask.title}" marked as ${completed ? 'completed' : 'pending'}.`,
@@ -263,7 +273,14 @@ app.post("/api/db/subtasks/toggle", (req, res) => {
 // Create new Subtask manually
 app.post("/api/db/subtasks/add", (req, res) => {
   const { taskId, title, estimatedMinutes } = req.body;
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   const db = loadDB();
+
+  const parentTask = db.tasks.find(t => t.id === taskId);
+  if (parentTask && parentTask.userId !== userEmail) {
+    return res.status(403).json({ error: "Unauthorized access to this task." });
+  }
+
   const subtask = {
     id: "sub_" + Math.random().toString(36).substring(2, 9),
     taskId,
@@ -280,10 +297,11 @@ app.post("/api/db/subtasks/add", (req, res) => {
 
 // Sync/Connect Google Calendar (Simulated / Live)
 app.post("/api/calendar/sync-all", (req, res) => {
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   const db = loadDB();
   
-  // Connect and sync any unsynced local tasks to calendar as synced events
-  const pendingSyncTasks = db.tasks.filter(t => t.scheduledSlot && !t.googleCalendarConnected);
+  // Connect and sync any unsynced local tasks to calendar as synced events for this specific user
+  const pendingSyncTasks = db.tasks.filter(t => t.userId === userEmail && t.scheduledSlot && !t.googleCalendarConnected);
   
   let count = 0;
   pendingSyncTasks.forEach(task => {
@@ -292,7 +310,7 @@ app.post("/api/calendar/sync-all", (req, res) => {
     if (parts.length === 2) {
       db.calendar_events.push({
         id: "ev_gcal_" + Math.random().toString(36).substring(2, 9),
-        userId: "user_default",
+        userId: userEmail,
         title: "🛡️ [Preempt AI] " + task.title,
         start: parts[0],
         end: parts[1],
@@ -308,7 +326,7 @@ app.post("/api/calendar/sync-all", (req, res) => {
 
   db.activity_logs.unshift({
     id: "log_" + Date.now(),
-    userId: "user_default",
+    userId: userEmail,
     timestamp: new Date().toISOString(),
     action: "Google Calendar Sync",
     details: `Successfully synchronized ${count} task schedules to Google Calendar actively.`,
@@ -321,11 +339,12 @@ app.post("/api/calendar/sync-all", (req, res) => {
 
 // Add calendar event manually
 app.post("/api/db/calendar/add", (req, res) => {
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   const db = loadDB();
   const event = req.body;
   
   event.id = "event_" + Math.random().toString(36).substring(2, 9);
-  event.userId = "user_default";
+  event.userId = userEmail;
   event.synced = event.synced !== undefined ? event.synced : true;
   event.source = event.source || "PREEMPT_AI";
   
@@ -333,7 +352,7 @@ app.post("/api/db/calendar/add", (req, res) => {
   
   db.activity_logs.unshift({
     id: "log_" + Date.now(),
-    userId: "user_default",
+    userId: userEmail,
     timestamp: new Date().toISOString(),
     action: "Calendar Item Added",
     details: `Slot booked for "${event.title}".`,
@@ -357,7 +376,7 @@ app.post("/api/ai/breakdown", async (req, res) => {
   const customAI = getAIInstance();
   if (customAI) {
     try {
-      const response = await customAI.models.generateContent({
+      const response = await generateContentWithFallback({
         model: "gemini-3.5-flash",
         contents: `Review this task title and description. Break it down into 3-5 structured, bite-sized components or milestones. Estimating estimatedMinutes spent per item.
 Title: ${title}
@@ -408,7 +427,7 @@ app.post("/api/ai/prioritize", async (req, res) => {
   const customAI = getAIInstance();
   if (customAI) {
     try {
-      const response = await customAI.models.generateContent({
+      const response = await generateContentWithFallback({
         model: "gemini-3.5-flash",
         contents: `Evaluate the Impact Score (1-10) and Effort Score (1-10) of the task. Keep in mind:
 High impact and low effort = High Priority (quick win).
@@ -459,7 +478,7 @@ app.post("/api/ai/predict-risk", async (req, res) => {
   const customAI = getAIInstance();
   if (customAI) {
     try {
-      const response = await customAI.models.generateContent({
+      const response = await generateContentWithFallback({
         model: "gemini-3.5-flash",
         contents: `Assess the immediate risk level (LOW, MEDIUM, HIGH) of missing the deadline of this task.
 Task: ${title}
@@ -502,14 +521,15 @@ Deadline: ${deadline}`,
 
 // 4. Schedule Optimizer
 app.post("/api/ai/optimize-schedule", async (req, res) => {
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   const db = loadDB();
-  const tasksToSchedule = db.tasks.filter(t => t.status !== "COMPLETED");
-  const calendarEvents = db.calendar_events;
+  const tasksToSchedule = db.tasks.filter(t => t.userId === userEmail && t.status !== "COMPLETED");
+  const calendarEvents = db.calendar_events.filter(e => e.userId === userEmail);
 
   const customAI = getAIInstance();
   if (customAI) {
     try {
-      const response = await customAI.models.generateContent({
+      const response = await generateContentWithFallback({
         model: "gemini-3.5-flash",
         contents: `We need to find optimal 1-2 hour work slots on this week's timetable for these tasks, avoiding conflicts with current meetings.
         Now is ${new Date().toISOString()}.
@@ -544,7 +564,7 @@ app.post("/api/ai/optimize-schedule", async (req, res) => {
       // Update local db
       let changes = 0;
       data.assignments.forEach((asg: any) => {
-        const task = db.tasks.find(t => t.id === asg.taskId);
+        const task = db.tasks.find(t => t.id === asg.taskId && t.userId === userEmail);
         if (task) {
           task.scheduledSlot = asg.slot;
           changes++;
@@ -554,7 +574,7 @@ app.post("/api/ai/optimize-schedule", async (req, res) => {
       if (changes > 0) {
         db.activity_logs.unshift({
           id: "log_" + Date.now(),
-          userId: "user_default",
+          userId: userEmail,
           timestamp: new Date().toISOString(),
           action: "AI Timetable Optimized",
           details: `Preempt Scheduler booked slots for ${changes} tasks avoiding conflict overlaps.`,
@@ -587,7 +607,7 @@ app.post("/api/ai/optimize-schedule", async (req, res) => {
   if (changes > 0) {
     db.activity_logs.unshift({
       id: "log_" + Date.now(),
-      userId: "user_default",
+      userId: userEmail,
       timestamp: new Date().toISOString(),
       action: "Local Timetable Scheduled",
       details: `Scheduled ${changes} priority tasks dynamically in open calendar pockets.`,
@@ -602,26 +622,31 @@ app.post("/api/ai/optimize-schedule", async (req, res) => {
 // 5. Conversational Copilot Chat Interface
 app.post("/api/ai/chat", async (req, res) => {
   const { message, history } = req.body;
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   if (!message) return res.status(400).json({ error: "Message content cannot be blank" });
 
   const db = loadDB();
   const customAI = getAIInstance();
   
+  const userTasks = db.tasks.filter(t => t.userId === userEmail);
+  const userEvents = db.calendar_events.filter(e => e.userId === userEmail);
+  const userLogs = db.activity_logs.filter(l => l.userId === userEmail);
+
   const systemPrompt = `You are Preempt AI (Senior Personal Task Architect & Proactive Life Saver).
   Your primary purpose is assessing pending deadlines, advising on schedule structures, warning about high-risk timelines, and scheduling mitigation work slots.
   
   Here is the active project database of the user for query context variables:
   ${JSON.stringify({
-    tasks: db.tasks,
-    meetings: db.calendar_events,
-    logs: db.activity_logs.slice(0, 5)
+    tasks: userTasks,
+    meetings: userEvents,
+    logs: userLogs.slice(0, 5)
   })}
   
   Answer concisely and helpfully. Keep instructions direct, bulleted, and professional. Avoid fluffy self-praising AI phrases. Avoid terminal status lines.`;
 
   if (customAI) {
     try {
-      const response = await customAI.models.generateContent({
+      const response = await generateContentWithFallback({
         model: "gemini-3.5-flash",
         contents: `${message}`,
         config: {
@@ -637,16 +662,16 @@ app.post("/api/ai/chat", async (req, res) => {
   // Context-aware simulator answers
   let responseText = "My apologies, the AI model is operating in fallback mode. ";
   if (/hello|hi|hey/i.test(message)) {
-    responseText += `Hello! I am Preempt AI, your companion task architect. Your Chemistry Lab Report is flagged as HIGH RISK because its deadline is tomorrow. Would you like me to break down your subtasks or find an open meeting-free slot to work on it?`;
+    responseText += `Hello! I am Preempt AI, your companion task architect. Would you like me to break down your subtasks or find an open meeting-free slot to work on them?`;
   } else if (/risk|threat|problem/i.test(message)) {
-    const highRiskTasks = db.tasks.filter(t => t.riskLevel === "HIGH");
+    const highRiskTasks = userTasks.filter(t => t.riskLevel === "HIGH");
     if (highRiskTasks.length > 0) {
       responseText += `Alert: You currently have ${highRiskTasks.length} task(s) flagged as HIGH-RISK. The primary bottleneck is "${highRiskTasks[0].title}" owing to its imminent target deadline. I recommend scheduling a focus window today.`;
     } else {
       responseText += "Excellent news! There are zero highly risky scheduling bottlenecks detected across your roadmap today.";
     }
   } else {
-    responseText += `Received command. Here is the context status: You have ${db.tasks.filter(t => t.status !== "COMPLETED").length} pending tasks remaining. I recommend running the Preempt Schedule Optimizer to book quiet workspaces on your Google Calendar.`;
+    responseText += `Received command. Here is the context status: You have ${userTasks.filter(t => t.status !== "COMPLETED").length} pending tasks remaining. I recommend running the Preempt Schedule Optimizer to book quiet workspaces on your Google Calendar.`;
   }
   res.json({ response: responseText });
 });
@@ -654,6 +679,7 @@ app.post("/api/ai/chat", async (req, res) => {
 // 6. Natural Language (Voice-enabled) Interpreter
 app.post("/api/ai/voice-interpreter", async (req, res) => {
   const { transcript } = req.body;
+  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
   if (!transcript) return res.status(400).json({ error: "Transcript is empty" });
 
   const customAI = getAIInstance();
@@ -663,7 +689,7 @@ app.post("/api/ai/voice-interpreter", async (req, res) => {
 
   if (customAI) {
     try {
-      const gRes = await customAI.models.generateContent({
+      const gRes = await generateContentWithFallback({
         model: "gemini-3.5-flash",
         contents: `Process this verbal command. Classify the user intent into one of: 'create_task', 'optimize', 'or 'general_chat'.
         If 'create_task', extract the structured title, priority, and approximate hours.
@@ -724,7 +750,7 @@ app.post("/api/ai/voice-interpreter", async (req, res) => {
     const db = loadDB();
     const newTask = {
       id: "task_" + Math.random().toString(36).substring(2, 9),
-      userId: "user_default",
+      userId: userEmail,
       title: extractedTask.title,
       description: extractedTask.description,
       deadline: new Date(Date.now() + 2 * 86400000).toISOString(), // defaults to 2 days
@@ -741,7 +767,7 @@ app.post("/api/ai/voice-interpreter", async (req, res) => {
     
     db.activity_logs.unshift({
       id: "log_" + Date.now(),
-      userId: "user_default",
+      userId: userEmail,
       timestamp: new Date().toISOString(),
       action: "Voice Task Dispatched",
       details: `Dispatched "${newTask.title}" directly via verbal speech recognition.`,

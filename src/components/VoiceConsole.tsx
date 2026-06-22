@@ -83,9 +83,13 @@ export default function VoiceConsole({ onVoiceTaskCreated, onVoiceTriggerOptimiz
     setIsProcessing(true);
     setAssistantReply("");
     try {
+      const userEmail = localStorage.getItem("preempt_user_email") || "user_default";
       const res = await fetch("/api/ai/voice-interpreter", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-email": userEmail
+        },
         body: JSON.stringify({ transcript: textCommand })
       });
       const data = await res.json();

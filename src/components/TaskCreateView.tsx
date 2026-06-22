@@ -52,9 +52,13 @@ export default function TaskCreateView({ onAddTask, onBackToDashboard }: TaskCre
     setPredictingPriority(true);
     setPredictedExplanation("");
     try {
+      const userEmail = localStorage.getItem("preempt_user_email") || "user_default";
       const res = await fetch("/api/ai/prioritize", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-email": userEmail
+        },
         body: JSON.stringify({ title, description })
       });
       const data = await res.json();
@@ -76,9 +80,13 @@ export default function TaskCreateView({ onAddTask, onBackToDashboard }: TaskCre
     if (!title) return alert("Please specify a task title before generating a milestone breakdown, Architect!");
     setBreakingDownTask(true);
     try {
+      const userEmail = localStorage.getItem("preempt_user_email") || "user_default";
       const res = await fetch("/api/ai/breakdown", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-email": userEmail
+        },
         body: JSON.stringify({ title, description })
       });
       const data = await res.json();

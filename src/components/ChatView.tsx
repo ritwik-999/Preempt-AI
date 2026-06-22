@@ -45,9 +45,13 @@ export default function ChatView({ onTaskCreatedTrigger }: ChatViewProps) {
     setIsLoading(true);
 
     try {
+      const userEmail = localStorage.getItem("preempt_user_email") || "user_default";
       const res = await fetch("/api/ai/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-email": userEmail
+        },
         body: JSON.stringify({ message: textToSend })
       });
       const data = await res.json();
