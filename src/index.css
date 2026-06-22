@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@keyframes barPulse {
+  0%, 100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1.0);
+  }
+}
+
+@utility animate-bar-pulse {
+  animation: barPulse 1s ease-in-out infinite;
+}
+
+@utility animate-spin-slow {
+  animation: spin 8s linear infinite;
+}
