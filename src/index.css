@@ -21,3 +21,16 @@
 @utility animate-spin-slow {
   animation: spin 8s linear infinite;
 }
+
+/* Force-hide default browser cursor globally when custom cursor is active */
+html.cursor-none,
+html.cursor-none *,
+html.cursor-none a,
+html.cursor-none button,
+html.cursor-none input,
+html.cursor-none select,
+html.cursor-none textarea,
+html.cursor-none [role='button'],
+html.cursor-none .cursor-pointer {
+  cursor: none !important;
+}

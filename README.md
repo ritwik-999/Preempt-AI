@@ -1,4 +1,3 @@
-
 ## Preempt AI
 
 Preempt AI is a full-stack productivity and scheduling assistant built with React, Vite, Express, and Gemini. It helps users capture tasks, break them into milestones, estimate priority and risk, schedule protected work blocks, and review productivity analytics from a local project dashboard.

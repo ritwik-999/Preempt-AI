@@ -67,9 +67,24 @@ export default function App() {
     localStorage.setItem("preempt_user_email", email);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const currentEmail = userEmail;
+    // Optimistic local state clearing
     setUserEmail(null);
     localStorage.removeItem("preempt_user_email");
+
+    if (currentEmail && (currentEmail.startsWith("guest_") || currentEmail.endsWith("@preempt.demo"))) {
+      try {
+        await fetch("/api/auth/logout-cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: currentEmail })
+        });
+        console.log("Temporary guest demo data cleaned up successfully from cloud storage.");
+      } catch (e) {
+        console.error("Failed to execute server-side guest cleanup on logout:", e);
+      }
+    }
   };
 
   // Toggle Subtask milestone checkboxes (Phase 2)

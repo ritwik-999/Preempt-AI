@@ -31,13 +31,30 @@ export default function CustomCursor() {
 
     if (isMobile) return;
 
+    let lastX = -100;
+    let lastY = -100;
+
     // Track mouse coordinates
     const moveCursor = (e: MouseEvent) => {
+      lastX = e.clientX;
+      lastY = e.clientY;
       cursorX.set(e.clientX - 16); // Center the 32px outer circle
       cursorY.set(e.clientY - 16);
       dotX.set(e.clientX - 4);     // Center the 8px dot
       dotY.set(e.clientY - 4);
-      if (!isVisible) setIsVisible(true);
+      setIsVisible(true);
+    };
+
+    // Fast check for interactive elements under coordinates (especially useful on scroll)
+    const checkHoverAtPoint = (x: number, y: number) => {
+      if (x < 0 || y < 0) return;
+      const el = document.elementFromPoint(x, y);
+      if (el) {
+        const isInteractive = !!el.closest(
+          "a, button, input, select, textarea, [role='button'], .cursor-pointer"
+        );
+        setIsHovered(isInteractive);
+      }
     };
 
     // Track interactive hover state changes
@@ -51,11 +68,17 @@ export default function CustomCursor() {
       });
     };
 
+    // Trigger hover checks when scrolling (since elements shift under the static physical cursor)
+    const handleScroll = () => {
+      checkHoverAtPoint(lastX, lastY);
+    };
+
     // Re-bind listeners when content shifts
     const observer = new MutationObserver(addHoverListeners);
     observer.observe(document.body, { childList: true, subtree: true });
 
     window.addEventListener("mousemove", moveCursor);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     document.addEventListener("mouseleave", () => setIsVisible(false));
     document.addEventListener("mouseenter", () => setIsVisible(true));
     addHoverListeners();
@@ -66,12 +89,13 @@ export default function CustomCursor() {
     return () => {
       window.removeEventListener("resize", checkDevice);
       window.removeEventListener("mousemove", moveCursor);
+      window.removeEventListener("scroll", handleScroll);
       document.removeEventListener("mouseleave", () => setIsVisible(false));
       document.removeEventListener("mouseenter", () => setIsVisible(true));
       observer.disconnect();
       document.documentElement.classList.remove("cursor-none");
     };
-  }, [isMobile, isVisible]);
+  }, [isMobile]);
 
   if (isMobile || !isVisible) return null;
 

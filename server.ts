@@ -3,6 +3,16 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import crypto from "crypto";
+
+// Helper function to securely hash passwords using PBKDF2
+function hashPassword(password: string, salt: string): string {
+  return crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
+}
+
+function generateSalt(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
 
 // Initialize express app
 const app = express();
@@ -103,6 +113,35 @@ function loadDB(): DBSchema {
         dbUpdated = true;
       }
     });
+
+    // Proactive garbage collection for stale guest accounts (> 6 hours old) to keep database extremely compact
+    if (parsed.users && parsed.users.length > 0) {
+      const now = Date.now();
+      const sixHoursMs = 6 * 60 * 60 * 1000;
+      const guestUsersToPrune = parsed.users.filter((u: any) => {
+        if (u.email && (u.email.startsWith("guest_") || u.email.endsWith("@preempt.demo"))) {
+          const createdAtTime = u.createdAt ? new Date(u.createdAt).getTime() : 0;
+          return (now - createdAtTime) > sixHoursMs;
+        }
+        return false;
+      });
+
+      if (guestUsersToPrune.length > 0) {
+        const emailsToPrune = new Set(guestUsersToPrune.map((u: any) => u.email.toLowerCase()));
+        parsed.users = parsed.users.filter((u: any) => !u.email || !emailsToPrune.has(u.email.toLowerCase()));
+        
+        // Find tasks for these guests to prune subtasks
+        const guestTasksToPrune = parsed.tasks.filter((t: any) => t.userId && emailsToPrune.has(t.userId.toLowerCase()));
+        const guestTaskIds = new Set(guestTasksToPrune.map((t: any) => t.id));
+
+        parsed.tasks = parsed.tasks.filter((t: any) => !t.userId || !emailsToPrune.has(t.userId.toLowerCase()));
+        parsed.subtasks = parsed.subtasks.filter((s: any) => !guestTaskIds.has(s.taskId));
+        parsed.calendar_events = parsed.calendar_events.filter((e: any) => !e.userId || !emailsToPrune.has(e.userId.toLowerCase()));
+        parsed.activity_logs = parsed.activity_logs.filter((l: any) => !l.userId || !emailsToPrune.has(l.userId.toLowerCase()));
+        
+        dbUpdated = true;
+      }
+    }
 
     if (dbUpdated) {
       fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2));
@@ -213,12 +252,16 @@ app.post("/api/auth/login", (req, res) => {
   let user = db.users.find(u => u.email && u.email.trim().toLowerCase() === normalizedEmail);
   
   if (!user) {
-    // Register the user automatically with the provided password!
+    // Register the user automatically with a cryptographically hashed password!
+    const salt = generateSalt();
+    const hashedPassword = hashPassword(password, salt);
+
     user = {
       id: "user_" + Math.random().toString(36).substring(2, 9),
       email: normalizedEmail,
       name: email.split("@")[0],
-      password: password, // Store password
+      salt: salt,
+      password: hashedPassword,
       createdAt: new Date().toISOString()
     };
     db.users.push(user);
@@ -236,15 +279,19 @@ app.post("/api/auth/login", (req, res) => {
     writeDB(db);
     return res.json({ success: true, email: user.email, message: "Welcome! Registered your new secure workspace." });
   } else {
-    // If user exists, verify password!
-    if (user.password && user.password !== password) {
-      return res.status(401).json({ error: "Incorrect password for this email address. Please try again." });
-    }
-    
-    // If for some reason password is blank, register/save the submitted password
-    if (!user.password) {
-      user.password = password;
+    // If the user exists but doesn't have a salt (legacy plain-text account), migrate them seamlessly on login
+    if (!user.salt) {
+      const salt = generateSalt();
+      const rawPassword = user.password || password;
+      user.salt = salt;
+      user.password = hashPassword(rawPassword, salt);
       writeDB(db);
+    }
+
+    // Verify hashed password
+    const hashedAttempt = hashPassword(password, user.salt);
+    if (user.password !== hashedAttempt) {
+      return res.status(401).json({ error: "Incorrect password for this email address. Please try again." });
     }
     
     return res.json({ success: true, email: user.email });
@@ -267,8 +314,10 @@ app.post("/api/auth/reset-password", (req, res) => {
     return res.status(404).json({ error: "Account not found. Please register or verify the email spelling." });
   }
 
-  // Update password in db
-  user.password = newPassword;
+  // Update password in db using cryptographic hashing with a newly generated salt
+  const salt = generateSalt();
+  user.salt = salt;
+  user.password = hashPassword(newPassword, salt);
 
   // Add key action activity log
   db.activity_logs.unshift({
@@ -286,6 +335,36 @@ app.post("/api/auth/reset-password", (req, res) => {
     success: true, 
     message: "Password updated successfully! You can now log in with your new credentials." 
   });
+});
+
+app.post("/api/auth/logout-cleanup", (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "Email is required for cleanup." });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  
+  // Only clean up guest/demo accounts
+  if (normalizedEmail.startsWith("guest_") || normalizedEmail.endsWith("@preempt.demo")) {
+    const db = loadDB();
+    
+    // Find all tasks for this guest user to prune their subtasks
+    const guestTasks = db.tasks.filter(t => t.userId === normalizedEmail);
+    const guestTaskIds = new Set(guestTasks.map(t => t.id));
+
+    // Prune collections
+    db.users = db.users.filter(u => u.email && u.email.trim().toLowerCase() !== normalizedEmail);
+    db.tasks = db.tasks.filter(t => t.userId !== normalizedEmail);
+    db.subtasks = db.subtasks.filter(s => !guestTaskIds.has(s.taskId));
+    db.calendar_events = db.calendar_events.filter(e => e.userId !== normalizedEmail);
+    db.activity_logs = db.activity_logs.filter(l => l.userId !== normalizedEmail);
+
+    writeDB(db);
+    return res.json({ success: true, message: `Guest account ${normalizedEmail} and all its data have been successfully purged.` });
+  }
+
+  return res.json({ success: false, message: "Non-guest account; skipped data cleanup to preserve persistent data." });
 });
 
 app.get("/api/db/get", (req, res) => {

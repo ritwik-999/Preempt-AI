@@ -95,23 +95,27 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     }
   };
 
-  const handleInstantEnter = async () => {
+  const handleLaunchDemoSession = async () => {
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
     try {
+      // Generate a unique client-side guest/demo identifier
+      const randomId = Math.random().toString(36).substring(2, 10);
+      const guestEmail = `guest_${randomId}@preempt.demo`;
+      
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "abc@gmail.com", password: "pass123" })
+        body: JSON.stringify({ email: guestEmail, password: "demoPass123" })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Authentication failed");
+        throw new Error(data.error || "Temporary session allocation failed");
       }
       onLoginSuccess(data.email);
     } catch (err: any) {
-      setError(err?.message || "Could not login to default architect console");
+      setError(err?.message || "Could not instantiate an isolated sandbox session");
     } finally {
       setIsLoading(false);
     }
@@ -238,23 +242,18 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
                   </button>
                 </form>
 
-                {/* Dimmed indicator of email & password example */}
-                <div className="mt-5 text-center text-[11px] font-mono text-zinc-500/70 border-t border-zinc-900/60 pt-4">
-                  <span className="text-zinc-650">Demo Credentials Indicator:</span>
-                  <div className="mt-1 flex items-center justify-center space-x-3 text-[10px]">
-                    <span>Email: <span className="text-zinc-400 font-bold">abc@gmail.com</span></span>
-                    <span className="text-zinc-700">|</span>
-                    <span>Password: <span className="text-zinc-400 font-bold">pass123</span></span>
-                  </div>
-                </div>
 
-                <div className="mt-4 flex flex-col space-y-3">
+
+                <div className="mt-4 flex flex-col space-y-2">
+                  <div className="text-[10px] text-center text-zinc-500 font-sans leading-relaxed px-1">
+                    Or use a zero-footprint sandbox. No signup required. Data is automatically destroyed upon logging out.
+                  </div>
                   <button
-                    onClick={handleInstantEnter}
+                    onClick={handleLaunchDemoSession}
                     type="button"
-                    className="w-full py-2.5 px-4 bg-[#121218] hover:bg-[#16161f] border border-gray-800 rounded-xl text-xs font-semibold font-mono text-gray-300 transition-all cursor-pointer flex items-center justify-center space-x-2"
+                    className="w-full py-2.5 px-4 bg-gradient-to-r from-teal-900/40 to-emerald-950/40 hover:from-teal-900/60 hover:to-emerald-950/60 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-semibold font-mono transition-all cursor-pointer flex items-center justify-center space-x-2 shadow-sm shadow-emerald-950/50"
                   >
-                    <span>🚀 Instant Enter with Demo Verified Session</span>
+                    <span>⚡ Launch Temporary Guest Session</span>
                   </button>
                 </div>
               </motion.div>
