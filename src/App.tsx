@@ -136,6 +136,12 @@ export default function App() {
         },
         body: JSON.stringify(reqTask)
       });
+      
+      if (!resTask.ok) {
+        const errorText = await resTask.text();
+        throw new Error(`Server returned status ${resTask.status}: ${errorText.slice(0, 200)}`);
+      }
+      
       const dataTask = await resTask.json();
 
       if (dataTask && dataTask.task) {
@@ -143,7 +149,7 @@ export default function App() {
 
         // 2. Add individual milestone subtasks sequentially
         for (const sub of taskPayload.subtasks) {
-          await fetch("/api/db/subtasks/add", {
+          const resSub = await fetch("/api/db/subtasks/add", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -155,6 +161,11 @@ export default function App() {
               estimatedMinutes: sub.estimatedMinutes
             })
           });
+          
+          if (!resSub.ok) {
+            const subErrorText = await resSub.text();
+            console.warn(`Subtask warning (status ${resSub.status}): ${subErrorText.slice(0, 200)}`);
+          }
         }
 
         // Trigger dynamic warning banner

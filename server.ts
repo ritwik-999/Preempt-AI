@@ -75,6 +75,18 @@ function loadDB(): DBSchema {
     if (!parsed.users) {
       parsed.users = [];
     }
+    if (!parsed.tasks) {
+      parsed.tasks = [];
+    }
+    if (!parsed.subtasks) {
+      parsed.subtasks = [];
+    }
+    if (!parsed.calendar_events) {
+      parsed.calendar_events = [];
+    }
+    if (!parsed.activity_logs) {
+      parsed.activity_logs = [];
+    }
 
     // Ensure the default login accounts are registered
     const normalizedAbc = "abc@gmail.com";
@@ -387,43 +399,48 @@ app.get("/api/db/get", (req, res) => {
 
 // Update or merge tasks
 app.post("/api/db/tasks/save", (req, res) => {
-  const db = loadDB();
-  const task = req.body;
-  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
-  
-  if (!task.id) {
-    task.id = "task_" + Math.random().toString(36).substring(2, 9);
-    task.createdAt = new Date().toISOString();
-    task.userId = userEmail;
-    task.status = task.status || "PENDING";
-    task.priority = task.priority || "MEDIUM";
-    task.riskLevel = task.riskLevel || "LOW";
-    task.impactScore = Number(task.impactScore) || 5;
-    task.effortScore = Number(task.effortScore) || 5;
-    db.tasks.unshift(task);
-  } else {
-    const idx = db.tasks.findIndex(t => t.id === task.id);
-    if (idx !== -1) {
-      const existingTask = db.tasks[idx];
-      db.tasks[idx] = { ...existingTask, ...task, userId: existingTask.userId || userEmail };
-    } else {
+  try {
+    const db = loadDB();
+    const task = req.body;
+    const userEmail = (req.headers["x-user-email"] as string) || "user_default";
+    
+    if (!task.id) {
+      task.id = "task_" + Math.random().toString(36).substring(2, 9);
+      task.createdAt = new Date().toISOString();
       task.userId = userEmail;
-      db.tasks.push(task);
+      task.status = task.status || "PENDING";
+      task.priority = task.priority || "MEDIUM";
+      task.riskLevel = task.riskLevel || "LOW";
+      task.impactScore = Number(task.impactScore) || 5;
+      task.effortScore = Number(task.effortScore) || 5;
+      db.tasks.unshift(task);
+    } else {
+      const idx = db.tasks.findIndex(t => t.id === task.id);
+      if (idx !== -1) {
+        const existingTask = db.tasks[idx];
+        db.tasks[idx] = { ...existingTask, ...task, userId: existingTask.userId || userEmail };
+      } else {
+        task.userId = userEmail;
+        db.tasks.push(task);
+      }
     }
-  }
-  
-  // Log it
-  db.activity_logs.unshift({
-    id: "log_" + Date.now(),
-    userId: userEmail,
-    timestamp: new Date().toISOString(),
-    action: `Task Updated`,
-    details: `Task: "${task.title}" updated successfully.`,
-    category: "INFO"
-  });
+    
+    // Log it
+    db.activity_logs.unshift({
+      id: "log_" + Date.now(),
+      userId: userEmail,
+      timestamp: new Date().toISOString(),
+      action: `Task Updated`,
+      details: `Task: "${task.title}" updated successfully.`,
+      category: "INFO"
+    });
 
-  writeDB(db);
-  res.json({ success: true, task });
+    writeDB(db);
+    res.json({ success: true, task });
+  } catch (error: any) {
+    console.error("Error saving task:", error);
+    res.status(500).json({ error: "Failed to save task", message: error.message });
+  }
 });
 
 // Delete Task
@@ -486,27 +503,32 @@ app.post("/api/db/subtasks/toggle", (req, res) => {
 
 // Create new Subtask manually
 app.post("/api/db/subtasks/add", (req, res) => {
-  const { taskId, title, estimatedMinutes } = req.body;
-  const userEmail = (req.headers["x-user-email"] as string) || "user_default";
-  const db = loadDB();
+  try {
+    const { taskId, title, estimatedMinutes } = req.body;
+    const userEmail = (req.headers["x-user-email"] as string) || "user_default";
+    const db = loadDB();
 
-  const parentTask = db.tasks.find(t => t.id === taskId);
-  if (parentTask && parentTask.userId !== userEmail) {
-    return res.status(403).json({ error: "Unauthorized access to this task." });
+    const parentTask = db.tasks.find(t => t.id === taskId);
+    if (parentTask && parentTask.userId !== userEmail) {
+      return res.status(403).json({ error: "Unauthorized access to this task." });
+    }
+
+    const subtask = {
+      id: "sub_" + Math.random().toString(36).substring(2, 9),
+      taskId,
+      title,
+      completed: false,
+      order: db.subtasks.filter(s => s.taskId === taskId).length + 1,
+      estimatedMinutes: Number(estimatedMinutes) || 30
+    };
+    
+    db.subtasks.push(subtask);
+    writeDB(db);
+    res.json({ success: true, subtask });
+  } catch (error: any) {
+    console.error("Error adding subtask:", error);
+    res.status(500).json({ error: "Failed to add subtask", message: error.message });
   }
-
-  const subtask = {
-    id: "sub_" + Math.random().toString(36).substring(2, 9),
-    taskId,
-    title,
-    completed: false,
-    order: db.subtasks.filter(s => s.taskId === taskId).length + 1,
-    estimatedMinutes: Number(estimatedMinutes) || 30
-  };
-  
-  db.subtasks.push(subtask);
-  writeDB(db);
-  res.json({ success: true, subtask });
 });
 
 // Sync/Connect Google Calendar (Simulated / Live)
@@ -992,6 +1014,17 @@ app.post("/api/ai/voice-interpreter", async (req, res) => {
   }
 
   res.json({ action: actionMatched, reply: replyText, task: extractedTask });
+});
+
+// Global structured JSON error handler for safe error formatting
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("Express App Route Error:", err);
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.name || "InternalServerError",
+    message: err.message || "An unexpected error occurred on the server.",
+    stack: process.env.NODE_ENV !== "production" ? err.stack : undefined
+  });
 });
 
 // Configure Vite middleware for asset serving in non-production, standard SPA fallback
