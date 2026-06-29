@@ -17,6 +17,20 @@ export default function VoiceConsole({ onVoiceTaskCreated, onVoiceTriggerOptimiz
   // Custom Speech recognition references
   const recognitionRef = useRef<any>(null);
 
+  // Global keyboard shortcut Alt+V to toggle voice assistant console
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        setIsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   // Initialize Speech Synthesis and Recognition hook bindings
   useEffect(() => {
     // Check for web Speech Recognition
@@ -63,7 +77,7 @@ export default function VoiceConsole({ onVoiceTaskCreated, onVoiceTriggerOptimiz
       }
     } else {
       // Manual prompt fallback
-      const mockText = prompt("No speech recognition in this setup. Enter voice command manually:", "Create task study chemistry dynamics");
+      const mockText = prompt("No speech recognition in this setup. Enter voice command manually:", "Create task launch project roadmap");
       if (mockText) {
         setTranscript(mockText);
         processVoiceCommand(mockText);
@@ -77,6 +91,18 @@ export default function VoiceConsole({ onVoiceTaskCreated, onVoiceTriggerOptimiz
     }
     setIsRecording(false);
   };
+
+  // Synchronize listening state with panel open/close state
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        startListening();
+      }, 250);
+      return () => clearTimeout(timer);
+    } else {
+      stopListening();
+    }
+  }, [isOpen]);
 
   const processVoiceCommand = async (textCommand: string) => {
     if (!textCommand.trim()) return;
@@ -104,10 +130,17 @@ export default function VoiceConsole({ onVoiceTaskCreated, onVoiceTriggerOptimiz
       }
 
       // Handle triggers in the UI
-      if (data.action === "create_task") {
+      if (["create_task", "prioritize_tasks", "plan_execute_task", "context_reminder", "edit_task"].includes(data.action)) {
+        onVoiceTaskCreated();
+      } else if (data.action === "timer_control" && data.task?.timerData) {
+        const timerEvent = new CustomEvent("preempt-timer-control", { 
+          detail: data.task.timerData 
+        });
+        window.dispatchEvent(timerEvent);
         onVoiceTaskCreated();
       } else if (data.action === "optimize") {
         onVoiceTriggerOptimizer();
+        onVoiceTaskCreated();
       }
     } catch (e) {
       console.error("Voice dispatch error:", e);
@@ -215,8 +248,12 @@ export default function VoiceConsole({ onVoiceTaskCreated, onVoiceTriggerOptimiz
               )}
             </div>
 
-            <div className="text-[9px] text-zinc-500 font-mono text-center block mt-3 uppercase tracking-wider">
-              "Create task chemistry research" or "optimize today"
+            <div className="text-[9px] text-zinc-500 font-mono text-center block mt-3 uppercase tracking-wider space-y-1">
+              <div className="text-emerald-400 font-bold border-b border-zinc-800/60 pb-1 mb-1">Shortcut: Press Alt + V to toggle voice link</div>
+              <div>Try: "prioritize my tasks" or "plan study chemistry"</div>
+              <div>"complete task [name]" or "mark task as done"</div>
+              <div>"remind me about high risk tasks" or "edit task to critical"</div>
+              <div>"start timer for 30 minutes" or "pause the timer" or "reset clock"</div>
             </div>
 
           </motion.div>

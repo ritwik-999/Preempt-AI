@@ -14,6 +14,19 @@
   }
 }
 
+@keyframes subtleFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@utility animate-float {
+  animation: subtleFloat 4s ease-in-out infinite;
+}
+
 @utility animate-bar-pulse {
   animation: barPulse 1s ease-in-out infinite;
 }

@@ -23,6 +23,9 @@ export default function App() {
   // Main navigation active tabs
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
+  // Pomodoro active session coordination
+  const [activeFocusTaskId, setActiveFocusTaskId] = useState<string | null>(null);
+
   // DB Core States synchronized from Express REST layer
   const [tasks, setTasks] = useState<Task[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
@@ -194,6 +197,42 @@ export default function App() {
     }
   };
 
+  // Toggle Task Completion status from Pomodoro timer finished
+  const handleToggleTaskComplete = async (taskId: string) => {
+    try {
+      const taskToToggle = tasks.find(t => t.id === taskId);
+      if (!taskToToggle) return;
+      const updatedStatus = taskToToggle.status === "COMPLETED" ? "PENDING" : "COMPLETED";
+      
+      if (updatedStatus === "COMPLETED") {
+        const taskSubtasks = subtasks.filter(s => s.taskId === taskId);
+        const hasUncompletedSubtask = taskSubtasks.some(s => !s.completed);
+        if (hasUncompletedSubtask) {
+          triggerNotificationStatus(`⚠️ Cannot complete "${taskToToggle.title}". Finish all subtask milestones first!`);
+          return;
+        }
+      }
+
+      const res = await fetch("/api/db/tasks/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-email": userEmail || ""
+        },
+        body: JSON.stringify({
+          ...taskToToggle,
+          status: updatedStatus
+        })
+      });
+      if (res.ok) {
+        triggerNotificationStatus(`Task status updated: "${taskToToggle.title}" is now marked as ${updatedStatus}.`);
+        syncDBState();
+      }
+    } catch (e) {
+      console.error("Failed to toggle task completion:", e);
+    }
+  };
+
   // Trigger Dynamic Scheduler Organizer (Phase 4)
   const handleTriggerOptimizer = async () => {
     setOptimizerLoading(true);
@@ -264,6 +303,11 @@ export default function App() {
             optimizerLoading={optimizerLoading}
             calendarLoading={calendarLoading}
             userEmail={userEmail}
+            activeFocusTaskId={activeFocusTaskId}
+            onClearActiveTask={() => setActiveFocusTaskId(null)}
+            onStartFocusSession={(id) => setActiveFocusTaskId(id)}
+            onToggleTaskComplete={handleToggleTaskComplete}
+            onAddActivityLog={(action, details) => triggerNotificationStatus(`${action}: ${details}`)}
           />
         );
       case "create":
@@ -321,7 +365,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-[#070709] text-zinc-100 selection:bg-emerald-500/30 relative overflow-x-hidden">
+      {/* Soft Ambient Glow Elements */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/[0.03] rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/3 right-1/4 w-[600px] h-[600px] bg-blue-500/[0.03] rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute bottom-10 left-1/3 w-[450px] h-[450px] bg-indigo-500/[0.03] rounded-full blur-[110px] pointer-events-none" />
+      
       <CustomCursor />
       
       {/* Top sticky navbar navigation indicators */}
